@@ -478,3 +478,113 @@ fn find_optimal_arb(
     }
     opt_amt
 }
+
+fn main() {
+    let trader = Trader {
+        id: 1,
+        amt_eth: RwLock::new(2000.0),
+        amt_dai: RwLock::new(10000.0),
+    };
+
+    let mut pool1 = uniswap_v3_pool {
+        liquidity: RwLock::new(0.0),
+        max_tick: math::get_max_tick(),
+        min_tick: math::get_min_tick(),
+        position_mapping: RwLock::new(HashMap::new()),
+        tick_mapping: RwLock::new(HashMap::new()),
+        liquidity_mapping: RwLock::new(HashMap::new()),
+        sqrt_price_x96: RwLock::new(5602277097478614198912276234240.0),
+        tick: RwLock::new(85176),
+        token_0: Token::Eth,
+        token_1: Token::Dai,
+        balance_0: RwLock::new(0.0),
+        balance_1: RwLock::new(0.0),
+    };
+
+    let mut pool2 = uniswap_v3_pool {
+        liquidity: RwLock::new(0.0),
+        max_tick: math::get_max_tick(),
+        min_tick: math::get_min_tick(),
+        position_mapping: RwLock::new(HashMap::new()),
+        tick_mapping: RwLock::new(HashMap::new()),
+        liquidity_mapping: RwLock::new(HashMap::new()),
+        sqrt_price_x96: RwLock::new(5602277097478614198912276234240.0),
+        tick: RwLock::new(85176),
+        token_0: Token::Eth,
+        token_1: Token::Dai,
+        balance_0: RwLock::new(0.0),
+        balance_1: RwLock::new(0.0),
+    };
+
+    pool1.mint(&trader, -86000, 86000, 100000000000000.0);
+    pool2.mint(&trader, -86000, 86000, 1000000000000000000.0);
+
+    let safepool1 = Arc::new(RwLock::new(pool1));
+    let safepool2 = Arc::new(RwLock::new(pool2));
+
+    let viewpool1 = Arc::clone(&safepool1);
+    let viewpool2 = Arc::clone(&safepool2);
+
+    let mut handles = vec![];
+
+    let writer = thread::spawn(move || {
+        for _ in 0..20 {
+            let mut rng = rand::thread_rng();
+            let randomness = rng.gen_range(0..10);
+
+            if randomness > 5 {
+                *&Arc::clone(&safepool1).write().unwrap().mint(&trader, -86000, 86000, 20000.0);
+                *&Arc::clone(&safepool2).write().unwrap().mint(&trader, -86000, 86000, 20000.0);
+            } else {
+                *&Arc::clone(&safepool1).write().unwrap().mint(&trader, -86000, 86000, -10000.0);
+                *&Arc::clone(&safepool2).write().unwrap().mint(&trader, -86000, 86000, -10000.0);
+            }
+        }
+        thread::sleep(Duration::from_millis(1000));
+    });
+
+    let searcher = thread::spawn(move || {
+        for _ in 0..10 {
+            let b1 = find_optimal_arb(
+                &Arc::clone(&viewpool1).read().unwrap(),
+                &Arc::clone(&viewpool2).read().unwrap(),
+                Token::Eth,
+                1000000.0
+            );
+            let b2 = find_optimal_arb(
+                &Arc::clone(&viewpool2).read().unwrap(),
+                &Arc::clone(&viewpool1).read().unwrap(),
+                Token::Eth,
+                1000000.0
+            );
+
+            println!(
+                "Profit from sending {:?}, {:?}",
+                b1,
+                calc_two_pool_arb_profit(
+                    b1,
+                    &Arc::clone(&viewpool1).read().unwrap(),
+                    &Arc::clone(&viewpool2).read().unwrap(),
+                    Token::Eth
+                )
+            );
+            println!(
+                "Profit from sending {:?}, {:?}",
+                b2,
+                calc_two_pool_arb_profit(
+                    b1,
+                    &Arc::clone(&viewpool2).read().unwrap(),
+                    &Arc::clone(&viewpool1).read().unwrap(),
+                    Token::Eth
+                )
+            );
+            thread::sleep(Duration::from_millis(2000));
+        }
+    });
+
+    handles.push(writer);
+    handles.push(searcher);
+    for i in handles {
+        i.join().unwrap();
+    }
+}
