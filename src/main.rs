@@ -246,14 +246,23 @@ impl uniswap_v3_pool {
     }
 
     fn mint(&mut self, owner: &Trader, lower_tick: i32, upper_tick: i32, liquidity_delta: f64) {
-        if !(lower_tick >= upper_tick || lower_tick < self.min_tick || upper_tick > self.max_tick)
-        & liquidity_delta != 0.
+        if
+            (!(
+                lower_tick >= upper_tick ||
+                lower_tick < self.min_tick ||
+                upper_tick > self.max_tick
+            ) & liquidity_delta) != 0.0
         {
-            let (amount0, amount1) = self._modify_position(owner, lower_tick, upper_tick, liquidity_delta);
-            if amount0 > 0. {
+            let (amount0, amount1) = self._modify_position(
+                owner,
+                lower_tick,
+                upper_tick,
+                liquidity_delta
+            );
+            if amount0 > 0.0 {
                 *self.balance_0.write().unwrap() += amount0;
             }
-            if amount1 > 0. {
+            if amount1 > 0.0 {
                 *self.balance_1.write().unwrap() += amount1;
             }
 
@@ -266,4 +275,49 @@ impl uniswap_v3_pool {
             }
         }
     }
+}
+
+struct Swapstate {
+    amount_specified_remaining: f64,
+    amount_calculated: f64,
+    sqrt_price_x96: f64,
+    tick: i32,
+    liquidity: f64,
+}
+
+struct StepState {
+    sqrt_price_start_x96: f64,
+    next_tick: i32,
+    sqrt_price_next_x96: f64,
+    amount_in: f64,
+    amount_out: f64,
+}
+
+// [next_initialized_tick] returns -1 if there is no tick available in the provided direction of liquidity. Returns the tick with liquidity if one is found.
+fn next_initialized_tick(liquidity_mapping: HashMap<i32, f64>, tick: i32, is_up: bool) -> i32 {
+    let liquidity_map = liquidity_mapping;
+
+    let mut sorted_keys: Vec<i32> = liquidity_map.into_keys().collect();
+    sorted_keys.sort_unstable();
+    let start_index: i32;
+    if is_up {
+        start_index = match sorted_keys.iter().position(|&x| x >= tick) {
+            None => -1,
+            Some(x) => x as i32,
+        };
+    } else {
+        start_index = match sorted_keys.iter().position(|&x| x <= tick) {
+            None => -1,
+            Some(x) => x as i32,
+        };
+    }
+    match sorted_keys.get(start_index as usize) {
+        None => -1,
+        x => *x.unwrap(),
+    }
+}
+
+fn cross(tick_mapping: &HashMap<i32, Tick>, next_tick: i32) -> f64 {
+    let tick = tick_mapping.get(&next_tick).unwrap();
+    *tick.liquidity.read().unwrap()
 }
