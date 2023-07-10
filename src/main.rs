@@ -245,5 +245,25 @@ impl uniswap_v3_pool {
         (amount0, amount1)
     }
 
-    
+    fn mint(&mut self, owner: &Trader, lower_tick: i32, upper_tick: i32, liquidity_delta: f64) {
+        if !(lower_tick >= upper_tick || lower_tick < self.min_tick || upper_tick > self.max_tick)
+        & liquidity_delta != 0.
+        {
+            let (amount0, amount1) = self._modify_position(owner, lower_tick, upper_tick, liquidity_delta);
+            if amount0 > 0. {
+                *self.balance_0.write().unwrap() += amount0;
+            }
+            if amount1 > 0. {
+                *self.balance_1.write().unwrap() += amount1;
+            }
+
+            if self.token_0 == Token::Eth {
+                *owner.amt_eth.write().unwrap() -= amount0;
+                *owner.amt_dai.write().unwrap() -= amount1;
+            } else {
+                *owner.amt_eth.write().unwrap() -= amount1;
+                *owner.amt_dai.write().unwrap() -= amount0;
+            }
+        }
+    }
 }
