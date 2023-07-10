@@ -387,4 +387,30 @@ fn v3_swap(
             *pool.liquidity.write().unwrap() = state.liquidity;
         }
     }
+
+    let mut pooltick = pool.tick.write().unwrap();
+    if state.tick != *pooltick {
+        *pooltick = state.tick;
+        *pool.sqrt_price_x96.write().unwrap() = state.sqrt_price_x96;
+    }
+    let (amount0, amount1) = if zero_for_one {
+        (amount_specified - state.amount_specified_remaining, state.amount_calculated)
+    } else {
+        (state.amount_calculated, amount_specified - state.amount_specified_remaining)
+    };
+
+    if zero_for_one {
+        *pool.balance_0.write().unwrap() += amount0;
+        *pool.balance_1.write().unwrap() -= amount1;
+    } else {
+        *pool.balance_0.write().unwrap() -= amount0;
+        *pool.balance_1.write().unwrap() += amount1;
+    }
+    if token_in == Token::Eth {
+        *trader.amt_eth.write().unwrap() -= amount0;
+        *trader.amt_dai.write().unwrap() += (1.0 - fee) * amount1;
+    } else {
+        *trader.amt_dai.write().unwrap() -= amount1;
+        *trader.amt_eth.write().unwrap() += (1.0 - fee) * amount0;
+    }
 }
