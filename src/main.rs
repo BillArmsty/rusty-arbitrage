@@ -10,7 +10,7 @@ mod math;
 #[derive(PartialEq, Copy, Clone)]
 enum Token {
     Eth,
-    Dai
+    Dai,
 }
 
 fn price_to_tick(price: f64) -> f64 {
@@ -23,9 +23,63 @@ fn tick_to_price(tick: i32) -> f64 {
     num.sqrt() * math::get_q96()
 }
 
-
 fn price_to_sqrtp(price: f64) -> f64 {
     price.sqrt() * math::get_q96()
 }
 
-fn liquidity0(amount: f64, pa: f64, p)
+fn liquidity0(amount: f64, pa: f64, pb: f64) -> f64 {
+    let q96 = math::get_q96();
+    if pa > pb {
+        return (amount * (pa * pb)) / q96 / (pb - pa);
+    } else {
+        return (amount * (pa * pb)) / q96 / (pa - pb);
+    }
+}
+
+fn liquidity1(amount: f64, pa: f64, pb: f64) -> f64 {
+    let q96 = math::get_q96();
+    if pa > pb {
+        return (amount * q96) / (pb - pa);
+    } else {
+        return (amount * q96) / (pa - pb);
+    }
+}
+
+fn calc_amount0(liq: f64, lower_tick: f64, upper_tick: f64) -> f64 {
+    let q96 = math::get_q96();
+    if upper_tick > lower_tick {
+        return (liq * q96 * (upper_tick - lower_tick)) / lower_tick / upper_tick;
+    } else {
+        return (liq * q96 * (lower_tick - upper_tick)) / upper_tick / lower_tick;
+    }
+}
+
+fn calc_amount1(liq: f64, lower_tick: f64, upper_tick: f64) -> f64 {
+    let q96 = math::get_q96();
+    if upper_tick > lower_tick {
+        return (liq * (upper_tick - lower_tick)) / q96;
+    } else {
+        return (liq * (lower_tick - upper_tick)) / q96;
+    }
+}
+
+fn calc_price_diff(amount_in: f64, liquidity: f64) -> f64 {
+    (amount_in * math::get_q96()) / liquidity
+}
+
+fn get_next_sqrt_price_from_input(
+    sqrt_price_current_x96: f64,
+    liquidity: f64,
+    amount_remaining: f64,
+    zero_for_one: bool
+) -> f64 {
+    let q96 = math::get_q96();
+    if zero_for_one {
+        return (
+            (liquidity * q96 * sqrt_price_current_x96) /
+            (liquidity * q96 + amount_remaining * sqrt_price_current_x96)
+        );
+    } else {
+        return sqrt_price_current_x96 + (amount_remaining * q96) / liquidity;
+    }
+}
