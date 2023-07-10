@@ -121,3 +121,92 @@ fn compute_swap_step(
         (sqrt_price_next_x96, amount_out, amount_in)
     }
 }
+
+struct Tick {
+    liquidity: RwLock<f64>,
+    initialized: RwLock<bool>,
+}
+
+struct Position {
+    liquidity: RwLock<f64>,
+}
+
+struct uniswap_v3_pool {
+    token_0: Token,
+    token_1: Token,
+    min_tick: i32,
+    max_tick: i32,
+    balance_0: RwLock<f64>,
+    balance_1: RwLock<f64>,
+    tick_mapping: RwLock<HashMap<i32, Tick>>,
+    liquidity_mapping: RwLock<HashMap<i32, f64>>,
+    position_mapping: RwLock<HashMap<i32, Position>>,
+    sqrt_price_x96: RwLock<f64>,
+    tick: RwLock<i32>,
+    liquidity: RwLock<f64>,
+}
+
+impl uniswap_v3_pool {
+    fn update(&mut self, tick: i32, liquidity_delta: f64) -> bool {
+        let default_tick = Tick {
+            liquidity: RwLock::new(0.0),
+            initialized: RwLock::new(false),
+        };
+
+        let tick_map = &mut self.tick_mapping.write().unwrap();
+
+        let info = tick_map.entry(tick).or_insert(default_tick);
+
+        let liquidity_before = *info.liquidity.read().unwrap();
+
+        let liquidity_after = liquidity_before + liquidity_delta;
+
+        if liquidity_before == 0.0 {
+            *info.initialized.write().unwrap() = true;
+            self.liquidity_mapping.write().unwrap().insert(tick, liquidity_after);
+        }
+
+        *info.liquidity.write().unwrap() = liquidity_after;
+
+        let flipped = (liquidity_after == 0.0) != (liquidity_before == 0.0);
+
+        flipped
+    }
+
+    fn _update_position(
+        &mut self,
+        owner: &Trader,
+        lower_tick: i32,
+        upper_tick: i32,
+        liquidity_delta: f64
+    ) {
+        let flipped_lower = self.update(lower_tick, liquidity_delta);
+        let flipped_upper = self.update(upper_tick, liquidity_delta);
+
+        if flipped_lower {
+            self.liquidity_mapping.write().unwrap().insert(lower_tick, 1.0);
+        }
+        if flipped_upper {
+            self.liquidity_mapping.write().unwrap().insert(upper_tick, 1.0);
+        }
+
+        let default_position = Position {
+            liquidity: RwLock::new(0.0),
+        };
+
+        let position_map = &mut self.position_mapping.write().unwrap();
+
+        let position = position_map.entry(owner.id).or_insert(default_position);
+
+        *position.liquidity.write().unwrap() += liquidity_delta;
+
+        if liquidity_delta < 0.0 {
+            if flipped_lower {
+                self.liquidity_mapping.write().unwrap().remove(&lower_tick);
+            }
+            if flipped_upper {
+                self.liquidity_mapping.write().unwrap().remove(&upper_tick);
+            }
+        }
+    }
+}
