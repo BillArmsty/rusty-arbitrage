@@ -83,3 +83,41 @@ fn get_next_sqrt_price_from_input(
         return sqrt_price_current_x96 + (amount_remaining * q96) / liquidity;
     }
 }
+
+fn compute_swap_step(
+    sqrt_price_current_x96: f64,
+    sqrt_price_target_x96: f64,
+    liquidity: f64,
+    amount_remaining: f64
+) -> (f64, f64, f64) {
+    let zero_for_one = sqrt_price_target_x96 >= sqrt_price_current_x96;
+
+    let amount_in_pre_calc = if zero_for_one {
+        calc_amount0(liquidity, sqrt_price_current_x96, sqrt_price_target_x96)
+    } else {
+        calc_amount1(liquidity, sqrt_price_current_x96, sqrt_price_target_x96)
+    };
+
+    let sqrt_price_next_x96: f64;
+
+    if amount_remaining >= amount_in_pre_calc {
+        sqrt_price_next_x96 = sqrt_price_target_x96;
+    } else {
+        sqrt_price_next_x96 = get_next_sqrt_price_from_input(
+            sqrt_price_current_x96,
+            liquidity,
+            amount_remaining,
+            zero_for_one
+        );
+    }
+
+    let amount_in = calc_amonut0(liquidity, sqrt_price_current_x96, sqrt_price_next_x96);
+
+    let amount_out = calc_amount1(liquidity, sqrt_price_current_x96, sqrt_price_next_x96);
+
+    if zero_for_one {
+        (sqrt_price_next_x96, amount_in, amount_out)
+    } else {
+        (sqrt_price_next_x96, amount_out, amount_in)
+    }
+}
