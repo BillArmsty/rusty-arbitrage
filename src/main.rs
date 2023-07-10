@@ -75,10 +75,10 @@ fn get_next_sqrt_price_from_input(
 ) -> f64 {
     let q96 = math::get_q96();
     if zero_for_one {
-        return (
+        return 
             (liquidity * q96 * sqrt_price_current_x96) /
             (liquidity * q96 + amount_remaining * sqrt_price_current_x96)
-        );
+        
     } else {
         return sqrt_price_current_x96 + (amount_remaining * q96) / liquidity;
     }
@@ -131,7 +131,7 @@ struct Position {
     liquidity: RwLock<f64>,
 }
 
-struct uniswap_v3_pool {
+struct UniswapV3Pool {
     token_0: Token,
     token_1: Token,
     min_tick: i32,
@@ -146,7 +146,7 @@ struct uniswap_v3_pool {
     liquidity: RwLock<f64>,
 }
 
-impl uniswap_v3_pool {
+impl UniswapV3Pool {
     fn update(&mut self, tick: i32, liquidity_delta: f64) -> bool {
         let default_tick = Tick {
             liquidity: RwLock::new(0.0),
@@ -246,24 +246,16 @@ impl uniswap_v3_pool {
     }
 
     fn mint(&mut self, owner: &Trader, lower_tick: i32, upper_tick: i32, liquidity_delta: f64) {
-        if
-            (!(
-                lower_tick >= upper_tick ||
-                lower_tick < self.min_tick ||
-                upper_tick > self.max_tick
-            ) & liquidity_delta) != 0.0
+        if !(lower_tick >= upper_tick || lower_tick < self.min_tick || upper_tick > self.max_tick)
+            && liquidity_delta != 0.
         {
-            let (amount0, amount1) = self._modify_position(
-                owner,
-                lower_tick,
-                upper_tick,
-                liquidity_delta
-            );
-            if amount0 > 0.0 {
-                *self.balance_0.write().unwrap() += amount0;
+            let (amount0, amount1) =
+                self._modify_position(owner, lower_tick, upper_tick, liquidity_delta);
+            if amount0 > 0. {
+                *self.balance_0.write().unwrap() += amount0
             }
-            if amount1 > 0.0 {
-                *self.balance_1.write().unwrap() += amount1;
+            if amount1 > 0. {
+                *self.balance_1.write().unwrap() += amount1
             }
 
             if self.token_0 == Token::Eth {
@@ -277,7 +269,7 @@ impl uniswap_v3_pool {
     }
 }
 
-struct Swapstate {
+struct SwapState {
     amount_specified_remaining: f64,
     amount_calculated: f64,
     sqrt_price_x96: f64,
@@ -324,7 +316,7 @@ fn cross(tick_mapping: &HashMap<i32, Tick>, next_tick: i32) -> f64 {
 
 fn v3_swap(
     trader: &mut Trader,
-    pool: &uniswap_v3_pool,
+    pool: &UniswapV3Pool,
     token_in: Token,
     amount_specified: f64,
     fee: f64
@@ -423,8 +415,8 @@ struct Trader {
 
 fn calc_two_pool_arb_profit(
     x_in: f64,
-    pool1: &uniswap_v3_pool,
-    pool2: &uniswap_v3_pool,
+    pool1: &UniswapV3Pool,
+    pool2: &UniswapV3Pool,
     token_in: Token
 ) -> f64 {
     let pool1_copy = pool1.clone();
@@ -435,8 +427,8 @@ fn calc_two_pool_arb_profit(
         amt_eth: RwLock::new(10000000000000.0),
     };
 
-    let start_dai = 100.0;
-    let start_eth = 10000000000000.0;
+    let start_dai: f64  = 100.0;
+    let start_eth: f64 = 10000000000000.0;
 
     if token_in == Token::Eth {
         v3_swap(&mut example_trader, &pool1_copy, Token::Eth, x_in, 0.03);
@@ -445,7 +437,7 @@ fn calc_two_pool_arb_profit(
 
         v3_swap(&mut example_trader, &pool2_copy, Token::Dai, change, 0.03);
 
-        let profit = *example_trader.amt_eth.read().unwrap() - start_eth;
+        // let profit = *example_trader.amt_eth.read().unwrap() - start_eth;
     } else {
         v3_swap(&mut example_trader, &pool1_copy, Token::Dai, x_in, 0.03);
 
@@ -453,15 +445,16 @@ fn calc_two_pool_arb_profit(
 
         v3_swap(&mut example_trader, &pool2_copy, Token::Eth, change, 0.03);
 
-        let profit = *example_trader.amt_dai.read().unwrap() - start_dai;
-
-        return profit;
     }
+    let profit = *example_trader.amt_eth.read().unwrap() - start_eth;
+    let profit = *example_trader.amt_dai.read().unwrap() - start_dai;
+
+    return profit;
 }
 
 fn find_optimal_arb(
-    pool1: &uniswap_v3_pool,
-    pool2: &uniswap_v3_pool,
+    pool1: &UniswapV3Pool,
+    pool2: &UniswapV3Pool,
     token_in: Token,
     max_amt_in: f64
 ) -> f64 {
@@ -486,7 +479,7 @@ fn main() {
         amt_dai: RwLock::new(10000.0),
     };
 
-    let mut pool1 = uniswap_v3_pool {
+    let mut pool1 = UniswapV3Pool {
         liquidity: RwLock::new(0.0),
         max_tick: math::get_max_tick(),
         min_tick: math::get_min_tick(),
@@ -501,7 +494,7 @@ fn main() {
         balance_1: RwLock::new(0.0),
     };
 
-    let mut pool2 = uniswap_v3_pool {
+    let mut pool2 = UniswapV3Pool {
         liquidity: RwLock::new(0.0),
         max_tick: math::get_max_tick(),
         min_tick: math::get_min_tick(),
@@ -586,5 +579,146 @@ fn main() {
     handles.push(searcher);
     for i in handles {
         i.join().unwrap();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn set_up_pool(
+        mint: bool,
+        lower_tick: i32,
+        upper_tick: i32,
+        liquidity: f64
+    ) -> (Trader, UniswapV3Pool) {
+        let trader = Trader {
+            id: 2,
+            amt_eth: RwLock::new(10000000000.0),
+            amt_dai: RwLock::new(10000000000.0),
+        };
+        let mut pool = UniswapV3Pool {
+            liquidity: RwLock::new(0.0),
+            max_tick: math::get_max_tick(),
+            min_tick: math::get_min_tick(),
+            position_mapping: RwLock::new(HashMap::new()),
+            tick_mapping: RwLock::new(HashMap::new()),
+            liquidity_mapping: RwLock::new(HashMap::new()),
+            sqrt_price_x96: RwLock::new(5602277097478614198912276234240.0),
+            tick: RwLock::new(85176),
+            token_0: Token::Eth,
+            token_1: Token::Dai,
+            balance_0: RwLock::new(0.0),
+            balance_1: RwLock::new(0.0),
+        };
+        if mint {
+            pool.mint(&trader, lower_tick, upper_tick, liquidity);
+        }
+
+        (trader, pool)
+    }
+
+    #[test]
+    fn price_to_sqrt_price() {
+        assert_eq!(price_to_sqrtp(5000.0), 5.602277097478614e30);
+    }
+
+    #[test]
+    fn v3_test_mint() {
+        let trader = Trader {
+            id: 2,
+            amt_eth: RwLock::new(2000.0),
+            amt_dai: RwLock::new(10000.0),
+        };
+        let mut pool = UniswapV3Pool {
+            liquidity: RwLock::new(0.0),
+            max_tick: math::get_max_tick(),
+            min_tick: math::get_min_tick(),
+            position_mapping: RwLock::new(HashMap::new()),
+            tick_mapping: RwLock::new(HashMap::new()),
+            liquidity_mapping: RwLock::new(HashMap::new()),
+            sqrt_price_x96: RwLock::new(5602277097478614198912276234240.0),
+            tick: RwLock::new(85176),
+            token_0: Token::Eth,
+            token_1: Token::Dai,
+            balance_0: RwLock::new(0.0),
+            balance_1: RwLock::new(0.0),
+        };
+
+        pool.mint(&trader, 84222, 86129, 1517882343751509868544.0);
+
+        assert_eq!(*pool.sqrt_price_x96.read().unwrap(), 5602277097478614198912276234240.0);
+    }
+    #[test]
+    fn v3_test_remove() {
+        let trader = Trader {
+            id: 2,
+            amt_eth: RwLock::new(2000.0),
+            amt_dai: RwLock::new(10000.0),
+        };
+        let mut pool = UniswapV3Pool {
+            liquidity: RwLock::new(0.0),
+            max_tick: math::get_max_tick(),
+            min_tick: math::get_min_tick(),
+            position_mapping: RwLock::new(HashMap::new()),
+            tick_mapping: RwLock::new(HashMap::new()),
+            liquidity_mapping: RwLock::new(HashMap::new()),
+            sqrt_price_x96: RwLock::new(5602277097478614198912276234240.0),
+            tick: RwLock::new(85176),
+            token_0: Token::Eth,
+            token_1: Token::Dai,
+            balance_0: RwLock::new(0.0),
+            balance_1: RwLock::new(0.0),
+        };
+
+        pool.mint(&trader, 84222, 86129, 1517882343751509868544.0);
+
+        let liq = *pool.liquidity.read().unwrap();
+
+        assert_eq!(liq, 1517882343751509868544.0);
+
+        pool.mint(&trader, 84222, 86129, -1517882343751509868544.0);
+
+        assert_eq!(*pool.sqrt_price_x96.read().unwrap(), 5602277097478614198912276234240.0);
+        let new_liquidity = *pool.liquidity.read().unwrap();
+        assert_eq!(new_liquidity, 0.0)
+    }
+
+    #[test]
+    fn test_swap_eth() {
+        let (mut trader, pool) = set_up_pool(true, -86000, 86000, 100000000000.0);
+        let original = *trader.amt_eth.read().unwrap();
+        let og_dai = *trader.amt_dai.read().unwrap();
+
+        v3_swap(&mut trader, &pool, Token::Eth, 1000000.0, 0.03);
+
+        let post = *trader.amt_eth.read().unwrap();
+        let post_dai = *trader.amt_dai.read().unwrap();
+
+        // assert_eq!(original > post, false);
+        // assert_eq!(post_dai > og_dai, false);
+
+        assert_eq!(original > post, true);
+        assert_eq!(post_dai > og_dai, true);
+    }
+
+    #[test]
+    fn test_swap_dai() {
+        let (mut trader, pool) = set_up_pool(true, -86000, 86000, 10000000000000.0);
+        let original = *trader.amt_eth.read().unwrap();
+        let og_dai = *trader.amt_dai.read().unwrap();
+
+        v3_swap(&mut trader, &pool, Token::Dai, 100.0, 0.03);
+
+        let post = *trader.amt_eth.read().unwrap();
+        let post_dai = *trader.amt_dai.read().unwrap();
+
+        assert_eq!(original < post, true);
+        assert_eq!(post_dai < og_dai, true);
+    }
+
+    #[test]
+    fn benchmark_search_for_arb() {
+        main()
     }
 }
