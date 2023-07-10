@@ -414,3 +414,67 @@ fn v3_swap(
         *trader.amt_eth.write().unwrap() += (1.0 - fee) * amount0;
     }
 }
+
+struct Trader {
+    id: i32,
+    amt_eth: RwLock<f64>,
+    amt_dai: RwLock<f64>,
+}
+
+fn calc_two_pool_arb_profit(
+    x_in: f64,
+    pool1: &uniswap_v3_pool,
+    pool2: &uniswap_v3_pool,
+    token_in: Token
+) -> f64 {
+    let pool1_copy = pool1.clone();
+    let pool2_copy = pool2.clone();
+    let mut example_trader = Trader {
+        id: 1,
+        amt_dai: RwLock::new(100.0),
+        amt_eth: RwLock::new(10000000000000.0),
+    };
+
+    let start_dai = 100.0;
+    let start_eth = 10000000000000.0;
+
+    if token_in == Token::Eth {
+        v3_swap(&mut example_trader, &pool1_copy, Token::Eth, x_in, 0.03);
+
+        let change = *example_trader.amt_dai.read().unwrap() - start_dai;
+
+        v3_swap(&mut example_trader, &pool2_copy, Token::Dai, change, 0.03);
+
+        let profit = *example_trader.amt_eth.read().unwrap() - start_eth;
+    } else {
+        v3_swap(&mut example_trader, &pool1_copy, Token::Dai, x_in, 0.03);
+
+        let change = *example_trader.amt_eth.read().unwrap() - start_eth;
+
+        v3_swap(&mut example_trader, &pool2_copy, Token::Eth, change, 0.03);
+
+        let profit = *example_trader.amt_dai.read().unwrap() - start_dai;
+
+        return profit;
+    }
+}
+
+fn find_optimal_arb(
+    pool1: &uniswap_v3_pool,
+    pool2: &uniswap_v3_pool,
+    token_in: Token,
+    max_amt_in: f64
+) -> f64 {
+    let mut amt = 1.0;
+    let mut max_out = f64::MIN;
+    let mut opt_amt = 0.0;
+    while amt <= max_amt_in {
+        let amt_out = calc_two_pool_arb_profit(amt, pool1, pool2, token_in);
+        if amt_out > max_out {
+            max_out = amt_out;
+            opt_amt = amt;
+        }
+        amt += 100.0;
+    }
+    opt_amt
+}
