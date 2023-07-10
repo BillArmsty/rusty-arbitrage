@@ -321,3 +321,70 @@ fn cross(tick_mapping: &HashMap<i32, Tick>, next_tick: i32) -> f64 {
     let tick = tick_mapping.get(&next_tick).unwrap();
     *tick.liquidity.read().unwrap()
 }
+
+fn v3_swap(
+    trader: &mut Trader,
+    pool: &uniswap_v3_pool,
+    token_in: Token,
+    amount_specified: f64,
+    fee: f64
+) {
+    let zero_for_one: bool = token_in == pool.token_0;
+
+    let mut state = SwapState {
+        amount_specified_remaining: amount_specified,
+        amount_calculated: 0.0,
+        sqrt_price_x96: *pool.sqrt_price_x96.read().unwrap(),
+        tick: pool.tick.read().unwrap().clone(),
+        liquidity: *pool.liquidity.read().unwrap(),
+    };
+
+    while state.amount_specified_remaining > 0.0 {
+        let next_tick = next_initialized_tick(
+            pool.liquidity_mapping.read().unwrap().clone(),
+            state.tick,
+            zero_for_one
+        );
+        let sqrt_price_next_x96 = tick_to_price(next_tick);
+
+        let (next_sqrt_price_x96, amount_in, amount_out) = compute_swap_step(
+            state.sqrt_price_x96,
+            sqrt_price_next_x96,
+            state.liquidity,
+            state.amount_specified_remaining
+        );
+
+        let step = StepState {
+            sqrt_price_start_x96: state.sqrt_price_x96,
+            next_tick: next_tick,
+            sqrt_price_next_x96: next_sqrt_price_x96,
+            amount_in: amount_in,
+            amount_out: amount_out,
+        };
+
+        if step.amount_in == 0.0 {
+            return;
+        }
+
+        state.sqrt_price_x96 = next_sqrt_price_x96;
+        state.amount_specified_remaining -= step.amount_in;
+        state.amount_calculated += step.amount_out;
+
+        if state.sqrt_price_x96 == step.sqrt_price_next_x96 {
+            let mut liquidity_delta = cross(&*pool.tick_mapping.read().unwrap(), step.next_tick);
+
+            if zero_for_one {
+                liquidity_delta = -liquidity_delta;
+            }
+
+            state.liquidity += liquidity_delta;
+
+            state.tick = step.next_tick;
+        } else {
+            state.tick = price_to_tick(state.sqrt_price_x96) as i32;
+        }
+        if *pool.liquidity.write().unwrap() != state.liquidity {
+            *pool.liquidity.write().unwrap() = state.liquidity;
+        }
+    }
+}
