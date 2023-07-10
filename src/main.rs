@@ -111,7 +111,7 @@ fn compute_swap_step(
         );
     }
 
-    let amount_in = calc_amonut0(liquidity, sqrt_price_current_x96, sqrt_price_next_x96);
+    let amount_in = calc_amount0(liquidity, sqrt_price_current_x96, sqrt_price_next_x96);
 
     let amount_out = calc_amount1(liquidity, sqrt_price_current_x96, sqrt_price_next_x96);
 
@@ -209,4 +209,41 @@ impl uniswap_v3_pool {
             }
         }
     }
+
+    fn _modify_position(
+        &mut self,
+        owner: &Trader,
+        lower_tick: i32,
+        upper_tick: i32,
+        liquidity_delta: f64
+    ) -> (f64, f64) {
+        let mut amount0: f64 = 0.0;
+        let mut amount1: f64 = 0.0;
+        let sqrt_price_x96 = *self.sqrt_price_x96.read().unwrap();
+        let tick = *self.tick.read().unwrap();
+        self._update_position(owner, lower_tick, upper_tick, liquidity_delta);
+        if liquidity_delta != 0.0 {
+            if tick < lower_tick {
+                amount0 = calc_amount0(
+                    liquidity_delta,
+                    tick_to_price(lower_tick),
+                    tick_to_price(upper_tick)
+                );
+            } else if tick < upper_tick {
+                amount0 = calc_amount0(liquidity_delta, sqrt_price_x96, tick_to_price(upper_tick));
+
+                amount1 = calc_amount1(liquidity_delta, tick_to_price(lower_tick), sqrt_price_x96);
+                *self.liquidity.write().unwrap() += liquidity_delta;
+            } else {
+                amount1 = calc_amount1(
+                    liquidity_delta,
+                    tick_to_price(lower_tick),
+                    tick_to_price(upper_tick)
+                );
+            }
+        }
+        (amount0, amount1)
+    }
+
+    
 }
